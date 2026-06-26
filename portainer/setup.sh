@@ -61,7 +61,8 @@ LOG_PATH="/usr/lib/zabbix/alertscripts/pager.log"
 
 sudo tee "$SCRIPT_PATH" > /dev/null << 'SCRIPT'
 #!/bin/sh
-echo "$(date) | TO: $1 | SUBJECT: $2 | MSG: $3" >> /usr/lib/zabbix/alertscripts/pager.log
+TIMESTAMP=$(date)
+echo "$TIMESTAMP | TO: $1 | SUBJECT: $2 | MSG: $3" >> /usr/lib/zabbix/alertscripts/pager.log
 SCRIPT
 
 sudo chmod +x "$SCRIPT_PATH"

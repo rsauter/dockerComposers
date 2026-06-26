@@ -66,7 +66,8 @@ Write-Host "[4/4] Creating $PagerScript..."
 
 $scriptContent = @'
 #!/bin/sh
-echo "$(date) | TO: $1 | SUBJECT: $2 | MSG: $3" >> /usr/lib/zabbix/alertscripts/pager.log
+TIMESTAMP=$(date)
+echo "$TIMESTAMP | TO: $1 | SUBJECT: $2 | MSG: $3" >> /usr/lib/zabbix/alertscripts/pager.log
 '@
 
 # Write via a temporary alpine container that shares the volume
