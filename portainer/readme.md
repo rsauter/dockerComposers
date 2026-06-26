@@ -1,66 +1,126 @@
-# Portainer CE — Docker Compose
+# Zabbix 7.0 — Docker Compose
 
-Standalone Portainer Community Edition setup for managing local Docker environments via a web UI.
+Local playground setup for Zabbix 7.0 using PostgreSQL as the backend database.
 
 ## Services
 
-| Service | Image | Ports |
+| Service | Image | Port |
 |---|---|---|
-| Portainer CE | `portainer/portainer-ce:latest` | 9000 (HTTP), 9443 (HTTPS), 8000 (Edge Agent) |
+| PostgreSQL 16 | `postgres:16-alpine` | — |
+| Zabbix Server | `zabbix/zabbix-server-pgsql:7.0-alpine-latest` | 10051 |
+| Zabbix Web (Nginx) | `zabbix/zabbix-web-nginx-pgsql:7.0-alpine-latest` | 8080 |
+| Zabbix Agent 2 | `zabbix/zabbix-agent2:7.0-alpine-latest` | — |
 
-## Getting started
+## Quick start
+
+Use the setup script for your platform. It starts all containers, waits until Zabbix is ready, and creates the `fake-pager.sh` alert script automatically.
+
+**Linux / macOS**
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+**Windows (PowerShell)**
+```powershell
+# Allow local script execution if not already set
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+.\setup.ps1
+```
+
+Once the script completes, open the web UI:
+
+```
+http://localhost:8080
+```
+
+Default credentials: `Admin` / `zabbix`
+
+> **Note for Windows users:** Docker Desktop must be running before executing the setup script. The script writes the alert script into the Docker volume via an Alpine container — no direct filesystem access to the Docker VM is needed.
+
+## Manual start (without setup script)
 
 ```bash
-docker compose -f docker-compose.portainer.yml up -d
+docker compose up -d
+docker compose logs -f zabbix-server
 ```
 
-Then open the web UI:
+## First-time host configuration
 
-```
-http://localhost:9000
-```
+After the first startup, the Zabbix Agent interface needs to be pointed to the correct container name. In the web UI:
 
-> **Important:** On first startup you must set an admin password within **5 minutes**. If you miss this window, Portainer locks itself for security reasons. To reset, restart the container:
-> ```bash
-> docker compose -f docker-compose.portainer.yml restart portainer
-> ```
+*Data collection → Hosts → Zabbix server → Interfaces*
 
-## Ports
-
-| Port | Purpose |
+| Field | Value |
 |---|---|
-| 9000 | HTTP web UI |
-| 9443 | HTTPS web UI |
-| 8000 | Edge Agent tunnel — only needed for managing remote environments |
+| DNS name | `zabbix-agent` |
+| Connect to | DNS |
+| Port | `10050` |
+| IP address | `0.0.0.0` |
 
-If you are only managing a local Docker host, you can comment out port `8000` in the compose file.
+Zabbix 7.x requires a non-empty IP address field even when connecting via DNS — use `0.0.0.0` as a placeholder.
 
-## Managing the Zabbix stack from Portainer
+## Configuration
 
-Once Portainer is running, you can deploy the Zabbix stack directly from the UI:
+| Variable | Value |
+|---|---|
+| Database | `zabbix` |
+| DB user | `zabbix` |
+| DB password | `zabbix_pw` |
+| Timezone | `Europe/Zurich` |
 
-1. Go to **Stacks → Add stack**
-2. Choose **Upload** and select `docker-compose.yml`
-3. Name the stack (e.g. `zabbix`) and click **Deploy the stack**
-
-This gives you a visual overview of all Zabbix containers, logs, and resource usage in one place.
+To change the timezone, edit the `PHP_TZ` environment variable in the `zabbix-web` service.
 
 ## Volumes
 
 | Volume | Purpose |
 |---|---|
-| `portainer-data` | Portainer configuration and state |
+| `zabbix-db` | PostgreSQL data |
+| `zabbix-alertscripts` | Custom alert scripts for Media Types |
+| `zabbix-externalscripts` | External check scripts |
+
+## Fake Pager alert script
+
+The setup script creates `fake-pager.sh` in the `alertscripts` volume. It simulates a pager notification by writing to a log file inside the container.
+
+To watch alerts in real time:
+
+```bash
+docker exec zabbix-server tail -f /usr/lib/zabbix/alertscripts/pager.log
+```
+
+To configure it as a Media Type in Zabbix:
+
+*Alerts → Media types → Create media type*
+
+| Field | Value |
+|---|---|
+| Name | `Fake Pager` |
+| Type | `Script` |
+| Script name | `fake-pager.sh` |
+| Parameter 1 | `{ALERT.SENDTO}` |
+| Parameter 2 | `{ALERT.SUBJECT}` |
+| Parameter 3 | `{ALERT.MESSAGE}` |
+
+Then assign it to a user under *Users → Users → Admin → Media*.
+
+## Zabbix Agent
+
+The included Agent 2 monitors the Docker host itself and is pre-configured to report to the Zabbix server. It runs with `privileged: true` and mounts the Docker socket, enabling Docker-specific metrics out of the box.
+
+In the Zabbix web UI, the agent is registered as host `zabbix-server`.
 
 ## Stopping and cleanup
 
-Stop Portainer:
+Stop all containers:
 
 ```bash
-docker compose -f docker-compose.portainer.yml down
+docker compose down
 ```
 
 Stop and remove all data (full reset):
 
 ```bash
-docker compose -f docker-compose.portainer.yml down -v
+docker compose down -v
 ```
